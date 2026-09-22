@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "jsx": "react-jsx",
+    "moduleResolution": "Node16",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": [],
+    "rootDir": "../src/features/game",
+    "outDir": "../.game-check"
+  },
+  "include": [
+    "../src/features/game/types.ts",
+    "../src/features/game/journey/**/*.ts",
+    "../src/features/game/domain/**/*.ts",
+    "../src/features/game/data/**/*.ts",
+    "../src/features/game/services/**/*.ts",
+    "../src/features/game/state/gameReducer.ts",
+    "../src/features/game/persistence/**/*.ts"
+  ]
+}

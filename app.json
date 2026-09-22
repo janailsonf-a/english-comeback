@@ -1,25 +1,41 @@
 {
   "expo": {
-    "name": "english-comeback",
+    "name": "English Comeback",
     "slug": "english-comeback",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/brand-icon.png",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#0B0E13",
+        "foregroundImage": "./assets/brand-adaptive-icon.png",
+        "monochromeImage": "./assets/brand-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/brand-favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow English Comeback to record your Time Capsule locally on this device.",
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ]
+    ],
+    "scheme": "english-comeback",
+    "backgroundColor": "#0B0E13",
+    "experiments": {
+      "typedRoutes": true
     }
   }
 }
