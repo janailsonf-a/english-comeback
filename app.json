@@ -26,7 +26,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow English Comeback to record your Time Capsule locally on this device.",
+          "microphonePermission": "Allow English Comeback to record Speaking Missions and Time Capsules locally on this device.",
           "enableBackgroundRecording": false,
           "enableBackgroundPlayback": false
         }

@@ -1,4 +1,5 @@
 import type { NarrativeState } from "./narrative/types";
+import type { MissionProgressState } from "../missions/types";
 export const CATEGORIES = [
   "Listening",
   "Speaking",
@@ -29,12 +30,16 @@ export interface JourneyQuest {
   studyDay: number;
   completedAt: string | null;
   kind: "daily" | "return";
+  experience?: "interactive" | "external";
+  interactiveMissionId?: string | null;
+  worldId?: string;
+  chapterId?: string;
 }
 export interface StudySession {
   id: string;
   category: ActivityCategory;
   durationMinutes: number;
-  source: "quest" | "return" | "boss";
+  source: "quest" | "return" | "boss" | "mission";
   questId: string | null;
   completedAt: string;
   calendarDay: CalendarDay;
@@ -82,6 +87,7 @@ export interface JourneyState {
   boss: { completedSteps: string[]; defeatedAt: string | null };
   developmentData: boolean;
   narrative?: NarrativeState;
+  missions?: MissionProgressState;
 }
 // Reserved for genuine assessments; never derived from XP or study minutes.
 export interface SkillAssessment {

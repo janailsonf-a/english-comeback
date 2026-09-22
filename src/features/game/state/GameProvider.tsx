@@ -1,5 +1,6 @@
 import { DEVELOPMENT_PACE } from "../journey/narrative/config";
 import type { RecordingDraft } from "../journey/narrative/types";
+import type { MissionAction } from "../missions/types";
 import {
   createContext,
   useCallback,
@@ -37,6 +38,7 @@ interface GameContextValue extends GameState {
   skipPrologue: () => Promise<boolean>;
   saveTimeCapsule: (recording: RecordingDraft) => Promise<boolean>;
   equipTitle: (titleId: string | null) => Promise<boolean>;
+  missionAction: (action: MissionAction) => Promise<boolean>;
   dismissFeedback: (id: string) => void;
 }
 const GameContext = createContext<GameContextValue | null>(null);
@@ -211,6 +213,11 @@ export function GameProvider({
       ),
     [run],
   );
+  const missionAction = useCallback(
+    (action: MissionAction) =>
+      run((session, time) => session.mission(action, time)),
+    [run],
+  );
   const dismissFeedback = useCallback(
     (questId: string) => dispatch({ type: "dismissFeedback", questId }),
     [],
@@ -232,6 +239,7 @@ export function GameProvider({
         skipPrologue,
         saveTimeCapsule,
         equipTitle,
+        missionAction,
       }}
     >
       {children}

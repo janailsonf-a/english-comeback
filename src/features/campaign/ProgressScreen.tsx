@@ -4,6 +4,7 @@ import { Text } from "../../components/Text";
 import { useGame } from "../game/state/GameProvider";
 import { CATEGORIES } from "../game/journey/types";
 import { effortMetrics } from "../game/journey/selectors";
+import { interactiveMissionsCompleted } from "../game/missions/selectors";
 import {
   Heading,
   JourneyGate,
@@ -35,6 +36,7 @@ export function ProgressScreen() {
                 ],
                 ["TOTAL STUDY TIME", `${metrics.totalMinutes} min`],
                 ["QUESTS COMPLETED", metrics.questsCompleted],
+                ["INTERACTIVE MISSIONS", interactiveMissionsCompleted(journey)],
                 ["BOSSES DEFEATED", metrics.bossesDefeated],
                 ["ACHIEVEMENTS", metrics.achievements],
                 [
@@ -66,9 +68,9 @@ export function ProgressScreen() {
                 </View>
               ))}
               <Text variant="small" style={campaignStyles.muted}>
-                Minutes come from confirmed quest durations and Boss steps.
-                Lesson-only goals do not add estimated time. These records are
-                self-reported.
+                Interactive Mission time comes from completed attempts. External
+                lesson-only goals do not invent minutes. These effort records do
+                not represent an English proficiency score.
               </Text>
             </Card>
             <Card>

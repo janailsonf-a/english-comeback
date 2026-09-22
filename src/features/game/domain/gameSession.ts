@@ -17,6 +17,8 @@ import {
 } from "../journey/rules";
 import { projectJourney } from "../journey/projectSnapshot";
 import type { Clock } from "../journey/types";
+import { applyMissionAction } from "../missions/rules";
+import type { MissionAction } from "../missions/types";
 
 // Publish a complete snapshot only after saving. Serialize all mutations and
 // leave the previous state intact on failed writes, including reset/start.
@@ -81,6 +83,18 @@ export function createGameSession(
             return completeQuest(current, questId);
           }),
     journey,
+    mission: (action: MissionAction, now: Clock) =>
+      enqueue((current) => {
+        if (!current.journey) return { snapshot: current, feedback: null };
+        const result = applyMissionAction(current.journey, action, now);
+        return {
+          snapshot:
+            result.journey === current.journey
+              ? current
+              : projectJourney(current, result.journey),
+          feedback: result.feedback,
+        };
+      }),
     narrative: (action: NarrativeAction, now: Clock) =>
       enqueue((current) => {
         if (!current.journey) return { snapshot: current, feedback: null };

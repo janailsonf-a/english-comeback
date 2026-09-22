@@ -9,6 +9,7 @@ import { Sheet } from "../../../components/Sheet";
 import { colors } from "../../../theme/tokens";
 import { SILENCE } from "../../game/journey/config";
 import { bossHp } from "../../game/journey/selectors";
+import { bossPreparation } from "../../game/missions/selectors";
 import type { JourneyState } from "../../game/journey/types";
 import { useGame } from "../../game/state/GameProvider";
 import { Card, SaveError, campaignStyles } from "./CampaignUI";
@@ -18,6 +19,7 @@ export function BossEncounter({ journey }: { journey: JourneyState }) {
   const unlocked = journey.studyDays >= SILENCE.unlockStudyDays;
   const defeated = Boolean(journey.boss.defeatedAt);
   const hp = bossHp(journey);
+  const preparation = bossPreparation(journey);
   const nextStep = SILENCE.steps.find(
     (s) => !journey.boss.completedSteps.includes(s.id),
   );
@@ -48,6 +50,27 @@ export function BossEncounter({ journey }: { journey: JourneyState }) {
           </View>
           <BossPortrait size={90} />
         </View>
+        {!defeated && (
+          <View style={{ gap: 7 }}>
+            <Text variant="label" style={campaignStyles.muted}>
+              PREPARING FOR: THE SILENCE
+            </Text>
+            <Text variant="small" style={campaignStyles.muted}>
+              Speaking missions completed · {preparation.completed} /{" "}
+              {preparation.target}
+            </Text>
+            <ProgressBar
+              progress={preparation.completed / preparation.target}
+              color={colors.accent}
+              label="Speaking mission Boss preparation"
+              height={5}
+            />
+            <Text variant="small" style={campaignStyles.muted}>
+              Preparation builds confidence. Boss HP changes only inside the
+              battle.
+            </Text>
+          </View>
+        )}
         <Text variant="small" style={campaignStyles.muted}>
           {unlocked
             ? `${hp} / ${SILENCE.hp} HP`

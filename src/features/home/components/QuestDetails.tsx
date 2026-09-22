@@ -30,8 +30,12 @@ export function QuestDetails({
       </View>
       <View style={styles.heading}>
         <Text variant="label" style={{ color: presentation.color }}>
-          {quest.optional ? "RETURN QUEST" : "DAILY QUEST"} ·{" "}
-          {quest.category.toUpperCase()}
+          {quest.experience === "external"
+            ? "EXTERNAL MISSION"
+            : quest.optional
+              ? "RETURN QUEST"
+              : "DAILY QUEST"}{" "}
+          · {quest.category.toUpperCase()}
         </Text>
         <Text variant="hero">{quest.title}</Text>
         <Text style={styles.muted}>{quest.description}</Text>
@@ -56,8 +60,9 @@ export function QuestDetails({
         <Text>{quest.objective}</Text>
       </View>
       <Text variant="small" style={styles.muted}>
-        Study with your own material, then confirm below. XP rewards your
-        effort; this quest does not assess your English proficiency.
+        This activity happens outside English Comeback. Practice with your own
+        material, then confirm below. XP rewards effort and does not assess
+        English proficiency.
       </Text>
       {saveError && (
         <Text

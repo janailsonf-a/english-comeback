@@ -22,6 +22,11 @@ export interface JourneyFeedback {
   dailyCompleted?: number;
   dailyTotal?: number;
   chapterDay?: number;
+  missionId?: string;
+  missionType?: "SPEAKING" | "LISTENING" | "READING" | "VOCABULARY";
+  missionXp?: number;
+  missionDurationMinutes?: number;
+  missionRecordingReference?: string | null;
 }
 export interface JourneyResult {
   journey: JourneyState;
@@ -33,6 +38,7 @@ export type JourneyAction =
   | { type: "refresh" }
   | { type: "activate"; questId: string }
   | { type: "complete"; questId: string }
+  | { type: "completeMission"; questId: string; attemptId: string }
   | { type: "bossStep"; stepId: string };
 
 export function refreshJourney(state: JourneyState, now: Clock): JourneyState {
@@ -97,7 +103,14 @@ export function applyJourneyAction(
   if (!state.startedAt || now.day < (state.lastObservedDay ?? now.day))
     return { journey: state, feedback: null };
   let next = refreshJourney(state, now);
-  if ((action.type === "activate" || action.type === "complete" || action.type === "bossStep") && needsPrologue(next)) return { journey: next, feedback: null };
+  if (
+    (action.type === "activate" ||
+      action.type === "complete" ||
+      action.type === "completeMission" ||
+      action.type === "bossStep") &&
+    needsPrologue(next)
+  )
+    return { journey: next, feedback: null };
   if (action.type === "refresh") return { journey: next, feedback: null };
   if (action.type === "activate") {
     const quest = next.quests.find((q) => q.id === action.questId);
@@ -116,10 +129,22 @@ export function applyJourneyAction(
   let feedbackId: string;
   let dayComplete: number | undefined;
   let bossDefeated = false;
-  if (action.type === "complete") {
+  if (action.type === "complete" || action.type === "completeMission") {
     const quest = next.quests.find((q) => q.id === action.questId);
+    const missionAttempt =
+      action.type === "completeMission"
+        ? next.missions?.attempts.find(
+            (attempt) =>
+              attempt.id === action.attemptId &&
+              attempt.questId === action.questId &&
+              attempt.result === "COMPLETED",
+          )
+        : undefined;
     if (
       !quest ||
+      (action.type === "complete" && quest.experience === "interactive") ||
+      (action.type === "completeMission" &&
+        (quest.experience !== "interactive" || !missionAttempt)) ||
       !["available", "active"].includes(quest.status) ||
       (quest.kind === "daily" && quest.studyDay !== next.studyDays + 1)
     )
@@ -133,19 +158,29 @@ export function applyJourneyAction(
           : q,
       ),
     };
+    const sessionId = missionAttempt
+      ? `mission:${missionAttempt.id}`
+      : `quest:${quest.id}`;
+    const sessionMinutes = missionAttempt
+      ? Math.max(1, Math.ceil(missionAttempt.durationSeconds / 60))
+      : quest.durationMinutes;
     if (
-      quest.durationMinutes !== null &&
-      !next.sessions.some((s) => s.id === `quest:${quest.id}`)
+      sessionMinutes !== null &&
+      !next.sessions.some((session) => session.id === sessionId)
     )
       next = {
         ...next,
         sessions: [
           ...next.sessions,
           {
-            id: `quest:${quest.id}`,
+            id: sessionId,
             category: quest.category,
-            durationMinutes: quest.durationMinutes,
-            source: quest.kind === "return" ? "return" : "quest",
+            durationMinutes: sessionMinutes,
+            source: missionAttempt
+              ? "mission"
+              : quest.kind === "return"
+                ? "return"
+                : "quest",
             questId: quest.id,
             completedAt: now.instant,
             calendarDay: now.day,
@@ -225,10 +260,12 @@ export function applyJourneyAction(
       bossDefeated = true;
     }
   }
-  next = unlockTitles(unlockAchievements(
-    { ...next, lastActivityDay: now.day, comeback: "NORMAL" },
-    now,
-  ));
+  next = unlockTitles(
+    unlockAchievements(
+      { ...next, lastActivityDay: now.day, comeback: "NORMAL" },
+      now,
+    ),
+  );
   const achievementIds = next.achievements
     .filter(
       (a) =>
@@ -236,6 +273,10 @@ export function applyJourneyAction(
         !state.achievements.find((old) => old.id === a.id)?.unlocked,
     )
     .map((a) => a.id);
+  const completedQuest =
+    action.type === "complete" || action.type === "completeMission"
+      ? next.quests.find((quest) => quest.id === action.questId)
+      : undefined;
   return {
     journey: next,
     feedback: {
@@ -246,12 +287,24 @@ export function applyJourneyAction(
       dayComplete,
       bossDefeated,
       achievementIds,
-      titleIds: next.narrative?.titles.filter(t => !state.narrative?.titles.some(old => old.id === t.id)).map(t => t.id),
-      questTitle: action.type === "complete" ? next.quests.find(q => q.id === action.questId)?.title : undefined,
-      category: action.type === "complete" ? next.quests.find(q => q.id === action.questId)?.category : "Speaking",
-      dailyCompleted: action.type === "complete" ? next.quests.filter(q => q.kind === "daily" && q.studyDay === next.quests.find(q => q.id === action.questId)?.studyDay && q.status === "completed").length : undefined,
+      titleIds: next.narrative?.titles
+        .filter(
+          (title) =>
+            !state.narrative?.titles.some((old) => old.id === title.id),
+        )
+        .map((title) => title.id),
+      questTitle: completedQuest?.title,
+      category: completedQuest?.category ?? "Speaking",
+      dailyCompleted: completedQuest
+        ? next.quests.filter(
+            (quest) =>
+              quest.kind === "daily" &&
+              quest.studyDay === completedQuest.studyDay &&
+              quest.status === "completed",
+          ).length
+        : undefined,
       dailyTotal: CAMPAIGN.dailyQuestCount,
-      chapterDay: action.type === "complete" ? next.quests.find(q => q.id === action.questId)?.studyDay : undefined,
+      chapterDay: completedQuest?.studyDay,
     },
   };
 }

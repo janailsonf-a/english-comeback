@@ -119,7 +119,7 @@ export function validateJourney(value: unknown): asserts value is JourneyState {
         record(s) &&
         CATEGORIES.includes(s.category as (typeof CATEGORIES)[number]) &&
         integer(s.durationMinutes) &&
-        ["quest", "return", "boss"].includes(String(s.source)) &&
+        ["quest", "return", "boss", "mission"].includes(String(s.source)) &&
         (s.questId === null || typeof s.questId === "string") &&
         instant(s.completedAt) &&
         day(s.calendarDay),
@@ -234,12 +234,15 @@ export function validateJourney(value: unknown): asserts value is JourneyState {
     if (
       quest.status === "completed" &&
       quest.durationMinutes !== null &&
-      !state.sessions.some(
-        (session) =>
-          session.id === `quest:${quest.id}` &&
-          session.questId === quest.id &&
-          session.category === quest.category &&
-          session.durationMinutes === quest.durationMinutes,
+      !state.sessions.some((session) =>
+        quest.experience === "interactive"
+          ? session.source === "mission" &&
+            session.questId === quest.id &&
+            session.category === quest.category
+          : session.id === `quest:${quest.id}` &&
+            session.questId === quest.id &&
+            session.category === quest.category &&
+            session.durationMinutes === quest.durationMinutes,
       )
     )
       fail();

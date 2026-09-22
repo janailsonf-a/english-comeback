@@ -62,6 +62,13 @@ export function QuestCard({
             {quest.difficulty} · {quest.status.toUpperCase()}
           </Text>
         )}
+        {!completed && !locked && quest.experience && (
+          <Text variant="small" style={styles.missionKind}>
+            {quest.experience === "interactive"
+              ? "INTERACTIVE MISSION · PRACTICE HERE"
+              : "EXTERNAL MISSION · PRACTICE OUTSIDE"}
+          </Text>
+        )}
         {quest.status === "active" && (
           <Text variant="small" style={styles.active}>
             In progress · tap to continue
@@ -130,4 +137,5 @@ const styles = StyleSheet.create({
   rewardText: { fontFamily: fonts.bold, color: colors.accent, fontSize: 11 },
   claimed: { color: colors.muted, fontFamily: fonts.medium },
   active: { color: colors.accent, fontSize: 10, lineHeight: 15 },
+  missionKind: { color: colors.blue, fontSize: 9, lineHeight: 14 },
 });

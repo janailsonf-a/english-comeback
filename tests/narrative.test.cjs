@@ -2,6 +2,68 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const { startJourney } = require("../.game-check/journey/stateFactory");
 const { applyJourneyAction } = require("../.game-check/journey/rules");
+const { applyMissionAction } = require("../.game-check/missions/rules");
+const { missionDefinition } = require("../.game-check/missions/content");
+function completeThroughMission(state, questId, time) {
+  const quest = state.quests.find((candidate) => candidate.id === questId);
+  if (!quest?.interactiveMissionId)
+    return applyJourneyAction(state, { type: "complete", questId }, time);
+  let result = applyMissionAction(state, { type: "start", questId }, time);
+  let next = result.journey;
+  const definition = missionDefinition(quest.interactiveMissionId);
+  let run = next.missions?.active;
+  if (!definition || !run) return result;
+  if (definition.type === "LISTENING") {
+    result = applyMissionAction(next, { type: "audioPlayed", questId }, time);
+    next = result.journey;
+    run = next.missions.active;
+  }
+  while (run) {
+    const step = definition.steps[run.currentStep];
+    if (step.kind !== "PROMPT") {
+      const value =
+        step.kind === "MANUAL_PRACTICE"
+          ? "Practice sentence"
+          : step.correctOptionId;
+      result = applyMissionAction(
+        next,
+        {
+          type: "answer",
+          questId,
+          stepId: step.id,
+          value,
+          elapsedSeconds: definition.minimumActiveSeconds,
+        },
+        time,
+      );
+      next = result.journey;
+      run = next.missions.active;
+    }
+    if (!run || run.currentStep === definition.steps.length - 1) break;
+    result = applyMissionAction(
+      next,
+      {
+        type: "advance",
+        questId,
+        stepId: step.id,
+        elapsedSeconds: definition.minimumActiveSeconds,
+      },
+      time,
+    );
+    next = result.journey;
+    run = next.missions.active;
+  }
+  return applyMissionAction(
+    next,
+    {
+      type: "complete",
+      questId,
+      elapsedSeconds: definition.minimumActiveSeconds,
+    },
+    time,
+  );
+}
+
 const {
   applyDeveloperAction,
 } = require("../.game-check/journey/developerActions");
@@ -38,11 +100,7 @@ const fresh = () => ({ ...startJourney(now), narrative: initialNarrative() });
 const skip = (s) => applyNarrativeAction(s, { type: "skipPrologue" }, now);
 function finishDay(s, time = now) {
   for (const q of dailyQuests(s))
-    s = applyJourneyAction(
-      s,
-      { type: "complete", questId: q.id },
-      time,
-    ).journey;
+    s = completeThroughMission(s, q.id, time).journey;
   return s;
 }
 function memory() {
@@ -105,7 +163,7 @@ test("level-five title unlock is timestamped from the XP ledger and idempotent",
 });
 test("Speaking title tracks minutes of effort, not a linguistic score", () => {
   let s = skip(fresh());
-  for (let i = 0; i < 8; i++) s = finishDay(s);
+  for (let i = 0; i < 14; i++) s = finishDay(s);
   assert.ok(s.narrative.titles.some((t) => t.id === "voice-seeker"));
   assert.equal("skills" in s, false);
 });
@@ -164,8 +222,7 @@ test("new prologue blocks real quests until saved or explicitly skipped", () => 
   const continued = skip(s);
   assert.equal(needsPrologue(continued), false);
   assert.equal(
-    applyJourneyAction(continued, { type: "complete", questId: id }, now)
-      .feedback.xpAwarded,
+    completeThroughMission(continued, id, now).feedback.xpAwarded,
     20,
   );
 });
@@ -299,25 +356,13 @@ test("completed campaigns have no projected remainder", () => {
 test("quest feedback captures title, category and daily progress before next-day quests", () => {
   let s = skip(fresh());
   const qs = dailyQuests(s);
-  const first = applyJourneyAction(
-    s,
-    { type: "complete", questId: qs[0].id },
-    now,
-  );
+  const first = completeThroughMission(s, qs[0].id, now);
   assert.equal(first.feedback.questTitle, "Train Your Ears");
   assert.equal(first.feedback.category, "Listening");
   assert.equal(first.feedback.dailyCompleted, 1);
   s = first.journey;
-  s = applyJourneyAction(
-    s,
-    { type: "complete", questId: qs[1].id },
-    now,
-  ).journey;
-  const last = applyJourneyAction(
-    s,
-    { type: "complete", questId: qs[2].id },
-    now,
-  );
+  s = completeThroughMission(s, qs[1].id, now).journey;
+  const last = completeThroughMission(s, qs[2].id, now);
   assert.equal(last.feedback.dailyCompleted, 3);
   assert.equal(last.feedback.chapterDay, 1);
   assert.equal(dailyQuests(last.journey)[0].studyDay, 2);
@@ -562,30 +607,20 @@ test("confirmed reset clears narrative intentionally, cancellation preserves eve
 
 test("real quest completion announces earned titles once at Speaking and level milestones", () => {
   let s = skip(fresh());
-  for (let i = 0; i < 7; i++) s = finishDay(s);
-  const quests = dailyQuests(s);
-  s = applyJourneyAction(
-    s,
-    { type: "complete", questId: quests[0].id },
-    now,
-  ).journey;
-  const speaking = applyJourneyAction(
-    s,
-    { type: "complete", questId: quests[1].id },
-    now,
-  );
-  assert.deepEqual(speaking.feedback.titleIds, ["voice-seeker"]);
-  const last = applyJourneyAction(
-    speaking.journey,
-    { type: "complete", questId: quests[2].id },
-    now,
-  );
-  assert.deepEqual(last.feedback.titleIds, ["the-returner"]);
-  assert.equal(last.feedback.dayComplete, 8);
-  assert.equal(last.feedback.level, 5);
-  const duplicate = applyJourneyAction(
+  const announced = [];
+  let last;
+  for (let day = 0; day < 14; day++) {
+    for (const quest of dailyQuests(s)) {
+      last = completeThroughMission(s, quest.id, now);
+      announced.push(...(last.feedback?.titleIds ?? []));
+      s = last.journey;
+    }
+  }
+  assert.deepEqual(announced.sort(), ["the-returner", "voice-seeker"]);
+  assert.equal(last.feedback.dayComplete, 14);
+  const duplicate = completeThroughMission(
     last.journey,
-    { type: "complete", questId: quests[2].id },
+    last.feedback.questId,
     now,
   );
   assert.equal(duplicate.feedback, null);

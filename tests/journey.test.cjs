@@ -9,6 +9,68 @@ const {
   questsForDay,
   refreshJourney,
 } = require("../.game-check/journey/rules");
+const { applyMissionAction } = require("../.game-check/missions/rules");
+const { missionDefinition } = require("../.game-check/missions/content");
+function completeThroughMission(state, questId, time) {
+  const quest = state.quests.find((candidate) => candidate.id === questId);
+  if (!quest?.interactiveMissionId)
+    return applyJourneyAction(state, { type: "complete", questId }, time);
+  let result = applyMissionAction(state, { type: "start", questId }, time);
+  let next = result.journey;
+  const definition = missionDefinition(quest.interactiveMissionId);
+  let run = next.missions?.active;
+  if (!definition || !run) return result;
+  if (definition.type === "LISTENING") {
+    result = applyMissionAction(next, { type: "audioPlayed", questId }, time);
+    next = result.journey;
+    run = next.missions.active;
+  }
+  while (run) {
+    const step = definition.steps[run.currentStep];
+    if (step.kind !== "PROMPT") {
+      const value =
+        step.kind === "MANUAL_PRACTICE"
+          ? "Practice sentence"
+          : step.correctOptionId;
+      result = applyMissionAction(
+        next,
+        {
+          type: "answer",
+          questId,
+          stepId: step.id,
+          value,
+          elapsedSeconds: definition.minimumActiveSeconds,
+        },
+        time,
+      );
+      next = result.journey;
+      run = next.missions.active;
+    }
+    if (!run || run.currentStep === definition.steps.length - 1) break;
+    result = applyMissionAction(
+      next,
+      {
+        type: "advance",
+        questId,
+        stepId: step.id,
+        elapsedSeconds: definition.minimumActiveSeconds,
+      },
+      time,
+    );
+    next = result.journey;
+    run = next.missions.active;
+  }
+  return applyMissionAction(
+    next,
+    {
+      type: "complete",
+      questId,
+      elapsedSeconds: definition.minimumActiveSeconds,
+    },
+    time,
+  );
+}
+
 const {
   awardXp,
   xpRequiredForLevel,
@@ -43,8 +105,7 @@ const clock = (day) => ({ day, instant: `${day}T15:00:00.000Z` });
 const first = clock("2026-09-17");
 const start = (now) =>
   applyJourneyAction(emptyJourney(), { type: "start" }, now || first).journey;
-const complete = (s, id, now = first) =>
-  applyJourneyAction(s, { type: "complete", questId: id }, now);
+const complete = (s, id, now = first) => completeThroughMission(s, id, now);
 function day(s, now = first) {
   for (const q of dailyQuests(s)) s = complete(s, q.id, now).journey;
   return s;
@@ -148,7 +209,7 @@ test("quest completion records effort once without mutating input", () => {
   assert.deepEqual(s, old);
   assert.equal(result.journey.xp, 20);
   assert.equal(result.journey.sessions.length, 1);
-  assert.equal(result.journey.sessions[0].durationMinutes, 10);
+  assert.equal(result.journey.sessions[0].durationMinutes, 1);
   assert.equal(result.journey.quests[0].completedAt, first.instant);
   const duplicate = complete(result.journey, id);
   assert.equal(duplicate.feedback, null);
@@ -176,7 +237,7 @@ test("three main quests grant exactly one daily bonus and one Study Day", () => 
   assert.equal(s.studyDays, 0);
   const final = complete(s, ids[2]);
   s = final.journey;
-  assert.equal(s.totalXpEarned, 70);
+  assert.equal(s.totalXpEarned, 80);
   assert.equal(final.feedback.xpAwarded, 30);
   assert.equal(final.feedback.dayComplete, 1);
   assert.equal(s.studyDays, 1);
@@ -184,7 +245,7 @@ test("three main quests grant exactly one daily bonus and one Study Day", () => 
   assert.equal(s.xpRecords.filter((x) => x.source === "day").length, 1);
   for (const id of ids) s = complete(s, id).journey;
   assert.equal(s.studyDays, 1);
-  assert.equal(s.totalXpEarned, 70);
+  assert.equal(s.totalXpEarned, 80);
   assert.equal(dailyQuests(s)[0].studyDay, 2);
 });
 test("calendar inactivity never advances Study Days or reduces XP", () => {
@@ -229,7 +290,7 @@ test("exhausted rest tokens end streak while retaining permanent progress", () =
   const later = refreshJourney(s, clock("2026-09-18"));
   assert.equal(later.restTokens, 0);
   assert.equal(later.streak, 0);
-  assert.equal(later.totalXpEarned, 70);
+  assert.equal(later.totalXpEarned, 80);
   assert.equal(
     later.achievements.find((a) => a.id === "first-step").unlocked,
     true,
@@ -386,10 +447,11 @@ test("boss victory grants 150 XP and world unlock once", () => {
   assert.deepEqual(defeat(won), won);
   assert.equal(won.xpRecords.filter((x) => x.source === "boss").length, 1);
 });
-test("first-step, day, time and boss achievements unlock only once", () => {
+test("earned day, time and boss achievements unlock only once", () => {
   let s = world();
-  for (const id of ["first-step", "on-fire", "speak-up", "all-ears"])
+  for (const id of ["first-step", "on-fire", "speak-up"])
     assert.ok(s.achievements.find((a) => a.id === id).unlocked);
+  assert.equal(s.achievements.find((a) => a.id === "all-ears").unlocked, false);
   const firstUnlock = s.achievements.find(
     (a) => a.id === "first-step",
   ).unlockedAt;
@@ -400,7 +462,7 @@ test("first-step, day, time and boss achievements unlock only once", () => {
     s.achievements.find((a) => a.id === "first-step").unlockedAt,
     firstUnlock,
   );
-  assert.equal(s.achievements.filter((a) => a.unlocked).length, 6);
+  assert.equal(s.achievements.filter((a) => a.unlocked).length, 5);
   assert.equal(s.achievements.find((a) => a.id === "scholar").unlocked, false);
 });
 test("Scholar unlocks after fifty quest records including return quests", () => {
@@ -420,10 +482,10 @@ test("effort metrics sum records and support last seven days without skill score
   let s = day(start());
   s = day(s, clock("2026-09-25"));
   const all = effortMetrics(s);
-  assert.equal(all.totalMinutes, 33);
-  assert.equal(all.minutesByCategory.Speaking, 8);
+  assert.equal(all.totalMinutes, 18);
+  assert.equal(all.minutesByCategory.Speaking, 6);
   assert.equal(all.questsCompleted, 6);
-  assert.equal(effortMetrics(s, "2026-09-25", 7).totalMinutes, 18);
+  assert.equal(effortMetrics(s, "2026-09-25", 7).totalMinutes, 14);
   assert.equal(all.minutesByCategory.Reading, 0);
   assert.equal("skillScore" in all, false);
 });
@@ -570,7 +632,7 @@ test("new optional schema fields receive defaults without losing recorded progre
   );
   assert.equal(loaded.journey.developmentData, false);
   assert.equal(loaded.journey.studyDays, 1);
-  assert.equal(loaded.journey.totalXpEarned, 70);
+  assert.equal(loaded.journey.totalXpEarned, 80);
 });
 test("simultaneous third-quest completions persist one bonus, session and Study Day", async () => {
   const m = memory();
@@ -590,7 +652,7 @@ test("simultaneous third-quest completions persist one bonus, session and Study 
   assert.equal(results[0].feedback.dayComplete, 1);
   assert.equal(results[1].feedback, null);
   assert.equal(results[1].snapshot.journey.studyDays, 1);
-  assert.equal(results[1].snapshot.journey.totalXpEarned, 70);
+  assert.equal(results[1].snapshot.journey.totalXpEarned, 80);
   assert.equal(m.writes.length, 1);
 });
 test("simultaneous final boss steps persist one victory and achievement set", async () => {
@@ -632,11 +694,11 @@ test("failed real-journey writes do not publish rewards and retry remains idempo
     projectJourney(await mockGameService.loadGame(), start()),
     createJourneyStorage(adapter),
   );
-  const id = "day-1:train-your-ears";
+  const id = "day-1:knowledge-scroll";
   await assert.rejects(() => session.completeQuest(id, first));
   assert.equal(m.writes.length, 0);
   const result = await session.completeQuest(id, first);
-  assert.equal(result.snapshot.player.xp, 20);
+  assert.equal(result.snapshot.player.xp, 10);
   assert.equal((await session.completeQuest(id, first)).feedback, null);
   assert.equal(m.writes.length, 1);
 });
@@ -660,17 +722,17 @@ test("real journeys require a reference clock, so legacy XP cannot be awarded", 
     createJourneyStorage(memory()),
   );
   await assert.rejects(
-    () => session.completeQuest("day-1:train-your-ears"),
+    () => session.completeQuest("day-1:knowledge-scroll"),
     /clock/,
   );
   await assert.rejects(
-    () => session.activateQuest("day-1:train-your-ears"),
+    () => session.activateQuest("day-1:knowledge-scroll"),
     /clock/,
   );
-  const result = await session.completeQuest("day-1:train-your-ears", first);
-  assert.equal(result.snapshot.player.xp, 20);
+  const result = await session.completeQuest("day-1:knowledge-scroll", first);
+  assert.equal(result.snapshot.player.xp, 10);
 });
-test("concurrent distinct quests publish one day bonus without losing XP", async () => {
+test("manual quest commands cannot bypass interactive mission completion", async () => {
   const m = memory();
   const s = start();
   const session = createGameSession(
@@ -681,10 +743,10 @@ test("concurrent distinct quests publish one day bonus without losing XP", async
     dailyQuests(s).map((q) => session.completeQuest(q.id, first)),
   );
   const final = results.at(-1).snapshot.journey;
-  assert.equal(final.studyDays, 1);
-  assert.equal(final.totalXpEarned, 70);
-  assert.equal(final.sessions.length, 2);
-  assert.equal(results.filter((r) => r.feedback.dayComplete).length, 1);
+  assert.equal(final.studyDays, 0);
+  assert.equal(final.totalXpEarned, 10);
+  assert.equal(final.sessions.length, 0);
+  assert.equal(results.filter((r) => r.feedback).length, 1);
 });
 test("missing core state or removed effort history is rejected without overwriting it", async () => {
   const initial = await mockGameService.loadGame();

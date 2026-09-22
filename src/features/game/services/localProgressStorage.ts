@@ -1,4 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createNarrativeStorage } from "../persistence/narrativeStorage";
+import { createMissionStorage } from "../persistence/missionStorage";
 
-export const localProgressStorage = createNarrativeStorage(AsyncStorage);
+export const localProgressStorage = createMissionStorage(AsyncStorage);

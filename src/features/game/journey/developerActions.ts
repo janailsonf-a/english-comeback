@@ -14,7 +14,10 @@ import {
   refreshJourney,
   type JourneyResult,
 } from "./rules";
-import type { Clock, JourneyState } from "./types";
+import type { Clock, JourneyQuest, JourneyState } from "./types";
+import { applyMissionAction } from "../missions/rules";
+import { currentMissionStep } from "../missions/selectors";
+import { missionDefinition } from "../missions/content";
 
 export type DeveloperAction =
   | "advanceDay"
@@ -27,7 +30,43 @@ export type DeveloperAction =
   | "unlockTitle"
   | "advanceChapter"
   | "mockCapsule"
-  | "simulatePace";
+  | "simulatePace"
+  | "startInteractiveMission"
+  | "completeMission"
+  | "resetMission"
+  | "correctAnswer"
+  | "wrongAnswer"
+  | "completeSpeakingTimer";
+function completeDevelopmentQuest(
+  state: JourneyState,
+  quest: JourneyQuest,
+  now: Clock,
+): JourneyState {
+  if (quest.experience !== "interactive")
+    return applyJourneyAction(
+      state,
+      { type: "complete", questId: quest.id },
+      now,
+    ).journey;
+  let next = state;
+  if (!next.missions?.active)
+    next = applyMissionAction(
+      next,
+      { type: "start", questId: quest.id },
+      now,
+    ).journey;
+  return applyMissionAction(
+    next,
+    {
+      type: "complete",
+      questId: quest.id,
+      elapsedSeconds: 0,
+      developerBypass: true,
+    },
+    now,
+  ).journey;
+}
+
 export function applyDeveloperAction(
   state: JourneyState,
   action: DeveloperAction,
@@ -41,6 +80,135 @@ export function applyDeveloperAction(
   )
     return { journey: state, feedback: null };
   let next = { ...state, developmentData: true };
+  if (action === "startInteractiveMission") {
+    const quest = dailyQuests(next).find(
+      (candidate) =>
+        candidate.experience === "interactive" &&
+        candidate.status !== "completed",
+    );
+    return quest
+      ? applyMissionAction(next, { type: "start", questId: quest.id }, now)
+      : { journey: next, feedback: null };
+  }
+  if (action === "completeMission") {
+    let active = next.missions?.active;
+    if (!active) return { journey: next, feedback: null };
+    if (active.status === "PAUSED") {
+      next = applyMissionAction(
+        next,
+        { type: "resume", questId: active.questId },
+        now,
+      ).journey;
+      active = next.missions?.active;
+    }
+    if (!active) return { journey: next, feedback: null };
+    return applyMissionAction(
+      next,
+      {
+        type: "complete",
+        questId: active.questId,
+        elapsedSeconds: active.elapsedSeconds,
+        developerBypass: true,
+      },
+      now,
+    );
+  }
+  if (action === "resetMission") {
+    const active = next.missions?.active;
+    return active
+      ? applyMissionAction(
+          next,
+          { type: "reset", questId: active.questId, developerBypass: true },
+          now,
+        )
+      : { journey: next, feedback: null };
+  }
+  if (action === "correctAnswer" || action === "wrongAnswer") {
+    let active = next.missions?.active;
+    if (active?.status === "PAUSED") {
+      next = applyMissionAction(
+        next,
+        { type: "resume", questId: active.questId },
+        now,
+      ).journey;
+      active = next.missions?.active;
+    }
+    const definition = active ? missionDefinition(active.missionId) : null;
+    const step =
+      active && definition ? currentMissionStep(definition, active) : null;
+    if (
+      !active ||
+      !step ||
+      step.kind === "PROMPT" ||
+      step.kind === "MANUAL_PRACTICE"
+    )
+      return { journey: next, feedback: null };
+    if (definition?.type === "LISTENING")
+      next = applyMissionAction(
+        next,
+        { type: "audioPlayed", questId: active.questId },
+        now,
+      ).journey;
+    const value =
+      action === "correctAnswer"
+        ? step.correctOptionId
+        : (step.options.find((option) => option.id !== step.correctOptionId)
+            ?.id ?? step.correctOptionId);
+    return applyMissionAction(
+      next,
+      {
+        type: "answer",
+        questId: active.questId,
+        stepId: step.id,
+        value,
+        elapsedSeconds: active.elapsedSeconds,
+      },
+      now,
+    );
+  }
+  if (action === "completeSpeakingTimer") {
+    let active = next.missions?.active;
+    if (active?.status === "PAUSED") {
+      next = applyMissionAction(
+        next,
+        { type: "resume", questId: active.questId },
+        now,
+      ).journey;
+      active = next.missions?.active;
+    }
+    const definition = active ? missionDefinition(active.missionId) : null;
+    if (!active || definition?.type !== "SPEAKING")
+      return { journey: next, feedback: null };
+    let run = active;
+    while (run.currentStep < definition.steps.length - 1) {
+      next = applyMissionAction(
+        next,
+        {
+          type: "advance",
+          questId: run.questId,
+          stepId: definition.steps[run.currentStep].id,
+          elapsedSeconds: definition.minimumActiveSeconds,
+        },
+        now,
+      ).journey;
+      run = next.missions?.active ?? run;
+    }
+    return {
+      journey: {
+        ...next,
+        missions: next.missions
+          ? {
+              ...next.missions,
+              active: {
+                ...run,
+                elapsedSeconds: definition.minimumActiveSeconds,
+              },
+            }
+          : next.missions,
+      },
+      feedback: null,
+    };
+  }
   if (
     ["completePrologue", "unlockTitle", "mockCapsule", "simulatePace"].includes(
       action,
@@ -119,11 +287,7 @@ export function applyDeveloperAction(
         );
       next = applyNarrativeAction(next, { type: "skipPrologue" }, time);
       for (const quest of dailyQuests(next))
-        next = applyJourneyAction(
-          next,
-          { type: "complete", questId: quest.id },
-          time,
-        ).journey;
+        next = completeDevelopmentQuest(next, quest, time);
     }
     return { journey: next, feedback: null };
   }
@@ -144,11 +308,7 @@ export function applyDeveloperAction(
     while (next.studyDays < target) {
       const previousDay = next.studyDays;
       for (const quest of dailyQuests(next))
-        next = applyJourneyAction(
-          next,
-          { type: "complete", questId: quest.id },
-          now,
-        ).journey;
+        next = completeDevelopmentQuest(next, quest, now);
       if (next.studyDays === previousDay)
         throw new Error(
           "This Study Day cannot advance until its quests are available.",

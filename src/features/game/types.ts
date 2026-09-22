@@ -31,6 +31,8 @@ export interface Quest {
   difficulty?: "EASY" | "NORMAL" | "HARD";
   studyDay?: number;
   completedAt?: string | null;
+  experience?: "interactive" | "external";
+  interactiveMissionId?: string | null;
 }
 
 export interface WorldPreview {
@@ -42,7 +44,7 @@ export interface WorldPreview {
   journeyDays: number;
 }
 
-// A visual preview only: boss gameplay and rewards are outside this MVP.
+// Projected Boss data used by Home while the Journey owns battle state.
 export interface BossPreview {
   id: string;
   name: string;
@@ -73,4 +75,9 @@ export interface RewardFeedback {
   dailyCompleted?: number;
   dailyTotal?: number;
   chapterDay?: number;
+  missionId?: string;
+  missionType?: "SPEAKING" | "LISTENING" | "READING" | "VOCABULARY";
+  missionXp?: number;
+  missionDurationMinutes?: number;
+  missionRecordingReference?: string | null;
 }
