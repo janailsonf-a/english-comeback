@@ -445,7 +445,34 @@ export function missionDefinition(id: string) {
   return MISSION_DEFINITIONS.find((mission) => mission.id === id) ?? null;
 }
 
-export function missionsForStudyDay(studyDay: number) {
+export function missionsForStudyDay(
+  studyDay: number,
+  preferredVocabularyMissionIds: readonly string[] = [],
+) {
   const index = (studyDay - 1) % WORLD_ONE_MISSION_DAYS.length;
-  return WORLD_ONE_MISSION_DAYS[index] ?? [];
+  const scheduled = WORLD_ONE_MISSION_DAYS[index] ?? [];
+  if (preferredVocabularyMissionIds.length === 0) return scheduled;
+  const used = new Set(scheduled.map((mission) => mission.missionId));
+  let preferenceIndex = 0;
+  return scheduled.map((mission) => {
+    const definition = missionDefinition(mission.missionId);
+    if (definition?.type !== "VOCABULARY") return mission;
+    let preferred: string | undefined;
+    while (
+      !preferred &&
+      preferenceIndex < preferredVocabularyMissionIds.length
+    ) {
+      const candidate = preferredVocabularyMissionIds[preferenceIndex++];
+      if (candidate === mission.missionId) return mission;
+      if (
+        !used.has(candidate) &&
+        missionDefinition(candidate)?.type === "VOCABULARY"
+      )
+        preferred = candidate;
+    }
+    if (!preferred) return mission;
+    used.delete(mission.missionId);
+    used.add(preferred);
+    return { missionId: preferred, templateId: preferred };
+  });
 }

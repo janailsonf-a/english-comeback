@@ -1,5 +1,6 @@
 import type { NarrativeState } from "./narrative/types";
 import type { MissionProgressState } from "../missions/types";
+import type { LearningState } from "../learning/types";
 export const CATEGORIES = [
   "Listening",
   "Speaking",
@@ -88,6 +89,7 @@ export interface JourneyState {
   developmentData: boolean;
   narrative?: NarrativeState;
   missions?: MissionProgressState;
+  learning?: LearningState;
 }
 // Reserved for genuine assessments; never derived from XP or study minutes.
 export interface SkillAssessment {

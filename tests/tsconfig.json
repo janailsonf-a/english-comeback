@@ -14,6 +14,7 @@
     "../src/features/game/types.ts",
     "../src/features/game/journey/**/*.ts",
     "../src/features/game/missions/**/*.ts",
+    "../src/features/game/learning/**/*.ts",
     "../src/features/game/domain/**/*.ts",
     "../src/features/game/data/**/*.ts",
     "../src/features/game/services/**/*.ts",

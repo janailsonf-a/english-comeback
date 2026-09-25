@@ -13,6 +13,7 @@ import {
   DevelopmentBadge,
   campaignStyles,
 } from "./components/CampaignUI";
+import { VocabularyVault } from "./components/VocabularyVault";
 export function ProgressScreen() {
   const { snapshot, today } = useGame();
   const journey = snapshot?.journey;
@@ -88,6 +89,7 @@ export function ProgressScreen() {
                 activity&apos;s recorded local date.
               </Text>
             </Card>
+            <VocabularyVault />
             <AchievementGallery achievements={journey.achievements} />
             <Card>
               <Text variant="title">English progress</Text>

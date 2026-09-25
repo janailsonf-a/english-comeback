@@ -19,6 +19,8 @@ import { projectJourney } from "../journey/projectSnapshot";
 import type { Clock } from "../journey/types";
 import { applyMissionAction } from "../missions/rules";
 import type { MissionAction } from "../missions/types";
+import { applyLearningAction } from "../learning/rules";
+import type { LearningAction } from "../learning/types";
 
 // Publish a complete snapshot only after saving. Serialize all mutations and
 // leave the previous state intact on failed writes, including reset/start.
@@ -93,6 +95,16 @@ export function createGameSession(
               ? current
               : projectJourney(current, result.journey),
           feedback: result.feedback,
+        };
+      }),
+    learning: (action: LearningAction, now: Clock) =>
+      enqueue((current) => {
+        if (!current.journey) return { snapshot: current, feedback: null };
+        const next = applyLearningAction(current.journey, action, now);
+        return {
+          snapshot:
+            next === current.journey ? current : projectJourney(current, next),
+          feedback: null,
         };
       }),
     narrative: (action: NarrativeAction, now: Clock) =>
