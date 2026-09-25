@@ -14,6 +14,7 @@ import type {
   MissionAttempt,
   MissionRun,
 } from "./types";
+import { applyMissionLearning } from "../learning/rules";
 
 function unchanged(journey: JourneyState): JourneyResult {
   return { journey, feedback: null };
@@ -255,8 +256,9 @@ export function applyMissionAction(
       attempts: [...state.missions.attempts, attempt],
     },
   };
+  const withLearning = applyMissionLearning(withAttempt, attempt);
   const result = applyJourneyAction(
-    withAttempt,
+    withLearning,
     { type: "completeMission", questId: quest.id, attemptId: attempt.id },
     now,
   );

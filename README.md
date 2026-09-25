@@ -1,4 +1,4 @@
-# English Comeback — Interactive Missions v1
+# English Comeback — Learning Engine v1
 
 Aplicativo mobile de prática de inglês com uma campanha local de **90 Study Days**. A experiência combina aprendizado, progressão de RPG e uma jornada permanente. XP e Levels representam esforço e engajamento; não representam proficiência no idioma.
 
@@ -51,6 +51,12 @@ Progress mostra **Interactive Missions Completed** e os minutos reais registrado
 
 Speaking Missions também alimentam `PREPARING FOR: THE SILENCE`, com progresso 0/5 a 5/5. Esse indicador não altera o HP do Boss; HP só muda durante a batalha oficial após os 14 Study Days.
 
+## Learning Engine
+
+O Vocabulary Vault começa com cinco palavras ligadas ao conteúdo local e aceita importação manual de palavras ou expressões estudadas anteriormente. Respostas de Vocabulary Missions geram revisões `CORRECT`, `INCORRECT` ou `PRACTICED`; prática escrita autodeclarada nunca é tratada como resposta correta.
+
+Cada palavra possui histórico, próximo dia de revisão e estado `NEW`, `LEARNING`, `REVIEW` ou `MASTERED`. Intervalos iniciais de 1, 3, 7 e 30 dias priorizam palavras fracas ou vencidas ao escolher missões de vocabulário para Study Days futuros. Quests já persistidas não são reescritas. Esses estados representam somente o histórico de revisão dentro do app, não proficiência em inglês.
+
 ## Arquitetura
 
 ```text
@@ -72,23 +78,28 @@ src/
         selectors.ts                # status, condições, métricas e Boss preparation
         migration.ts                # enriquecimento seguro do schema anterior
         rewardSequence.ts           # ordem dos eventos pós-missão
+      learning/
+        config.ts                   # conteúdo inicial, bindings e intervalos
+        rules.ts                    # importação, revisões e progressão de domínio
+        selectors.ts                # due/weak, métricas e recomendação de missão
       journey/                      # campanha, XP, Study Days, Boss e narrativa
       domain/gameSession.ts         # fila compute → persist → publish
-      persistence/missionStorage.ts # schema 4 e validação
+      persistence/learningStorage.ts # schema 5, migração e validação
       state/GameProvider.tsx        # ações para a UI
 assets/missions/                    # dois WAVs locais de Listening
+tests/learning.test.cjs             # Learning Engine, integração e schema 5
 tests/missions.test.cjs             # Mission Engine, integração e schema 4
 ```
 
 A direção permanece `UI → state/actions → domain rules → persistence`. Conteúdo é configuração TypeScript e não fica hardcoded nos renderizadores. O Mission Engine aceita novos tipos no futuro sem exigir um componente por atividade.
 
-## Persistência — schema 4
+## Persistência — schema 5
 
-A chave ativa é `@english-comeback/missions-v4`, com `schemaVersion: 4`. O registro contém a Journey inteira, incluindo campanha, capítulos, XP, Levels, calendário, Rest Tokens, Boss, achievements, Titles, Time Capsules, Study Sessions, missão ativa e tentativas.
+A chave ativa é `@english-comeback/learning-v5`, com `schemaVersion: 5`. O registro contém a Journey inteira, incluindo campanha, capítulos, XP, Levels, calendário, Rest Tokens, Boss, achievements, Titles, Time Capsules, Study Sessions, missão ativa, tentativas, inventário de vocabulário e histórico de revisões.
 
-Na ausência de v4, o adapter lê o schema 3 e adiciona `missions`, metadados estáveis às quests e tipos de experiência. Quests já concluídas no schema 3 permanecem histórico externo: a migração não inventa tentativas nem reescreve recompensas passadas. Saves anteriores permanecem armazenados.
+Na ausência de v5, o adapter lê o schema 4 e adiciona o Learning Engine sem alterar progressão ou recompensas. A cadeia anterior 3→4 continua preservada: quests já concluídas no schema 3 permanecem histórico externo e nenhuma revisão é inventada retroativamente. Saves anteriores permanecem armazenados.
 
-Uma missão `IN_PROGRESS` encontrada ao carregar é persistida como `PAUSED`. A validação confere definições, reward, category, world/chapter, timestamps, calendário local, answers, duração mínima, recording reference, vínculo attempt/session/XP e unicidade. Dados inválidos ou schema futuro geram erro sem sobrescrever o registro.
+Uma missão `IN_PROGRESS` encontrada ao carregar é persistida como `PAUSED`. A validação também confere IDs e termos únicos, contadores, datas de revisão e o vínculo entre review, attempt, mission step e resposta. Dados inválidos ou schema futuro geram erro sem sobrescrever o registro.
 
 ## Sistema preservado
 
@@ -121,10 +132,11 @@ As ferramentas anteriores continuam disponíveis para Prologue, Titles, Time Cap
 6. Confira Mission Complete, +30 XP, +3 min Speaking, Level/Daily/Chapter progress e a Reward Sequence. Se gravou, teste PLAY MY RECORDING.
 7. Volte à Home. Abra **TRAIN YOUR EARS**, reproduza o áudio local, responda às duas questões e conclua. Uma resposta errada deve mostrar NOT QUITE e a explicação, sem punição de XP.
 8. Complete **KNOWLEDGE SCROLL** como External Mission. O primeiro dia totaliza 80 XP: 20 Listening + 30 Speaking + 10 external + 20 daily bonus.
-9. Use Developer Panel → Advance Study Day até chegar ao Study Day 3. Abra **MEMORY BATTLE**, responda aos desafios e confirme Vocabulary em Progress.
+9. Use Developer Panel → Advance Study Day até chegar ao Study Day 3. Abra **MEMORY BATTLE**, responda aos desafios e confirme o histórico no **Vocabulary Vault**, em Progress.
 10. Durante uma missão, use o botão X → Save and leave. Reabra a mesma quest e confira MISSION PAUSED → RESUME MISSION. Repita fechando totalmente o Expo Go; o save deve continuar pausado e sem XP indevido.
 11. Em Progress, confira Speaking, Listening, Reading, Vocabulary e Interactive Missions. Em THE SILENCE, confira Boss preparation separado do HP.
 12. Para testar rápido, use Start Interactive Mission e depois Complete Active Mission no painel. Esses registros ficam marcados como desenvolvimento.
+13. Em Progress → Vocabulary Vault, toque **ADD A WORD**, salve uma palavra com significado e reinicie o Expo Go para confirmar a persistência.
 
 ## Verificações
 
@@ -139,7 +151,7 @@ npm run export:ios
 npm run export:android
 ```
 
-Resultado atual: **131/131 testes passando**. Lint sem warnings, TypeScript sem erros, dependências compatíveis com Expo SDK 57 e bundles de produção aprovados para web, iOS e Android. O export web também foi servido localmente e carregou em viewport 390×844 sem erro de runtime.
+Resultado atual: **145/145 testes passando**. Lint sem warnings e TypeScript sem erros. A validação completa de dependências e exports permanece disponível nos comandos acima.
 
 ## Limitações atuais
 
@@ -150,12 +162,13 @@ Resultado atual: **131/131 testes passando**. Lint sem warnings, TypeScript sem 
 - Não há pause de gravação; há Start, Stop, Playback e Record Again.
 - Tentativas concluídas são permanentes. Ainda não existe histórico detalhado na UI nem replay de respostas antigas.
 - Apenas World 01 é jogável. Campaign II e III continuam bloqueadas.
-- O Learning Engine, vocabulary inventory e spaced repetition ainda não existem.
+- O agendamento de revisão é deliberadamente simples; ainda não existe um algoritmo completo de spaced repetition nem edição/remoção do inventário na UI.
+- Palavras importadas manualmente entram no Vault, mas ainda não geram conteúdo novo automaticamente porque não há IA nem templates locais para elas.
 - Não há backend, conta, cloud sync ou recuperação dos arquivos de áudio após remover o aplicativo.
 
 ## DevOps e builds
 
-O workflow `.github/workflows/ci.yml` roda em pushes para `master`, pull requests e execução manual. Ele usa Node 22.23.1 com cache npm, executa instalação reproduzível, 131 testes, lint, TypeScript, compatibilidade Expo, audit para HIGH/CRITICAL e exports web, iOS e Android. O export web fica disponível por sete dias como artifact. Os 13 alertas MODERATE transitivos conhecidos não são mascarados, mas não bloqueiam a CI.
+O workflow `.github/workflows/ci.yml` roda em pushes para `master`, pull requests e execução manual. Ele usa Node 22.23.1 com cache npm, executa a suíte completa, lint, TypeScript, compatibilidade Expo, audit para HIGH/CRITICAL e exports web, iOS e Android. O export web fica disponível por sete dias como artifact. Os 13 alertas MODERATE transitivos conhecidos não são mascarados, mas não bloqueiam a CI.
 
 O workflow `.github/workflows/eas-build.yml` é exclusivamente manual, aceita iOS ou Android e usa `preview` como padrão. `production` exige seleção explícita e o workflow não submete builds às lojas. Para utilizá-lo:
 

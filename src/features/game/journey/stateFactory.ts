@@ -3,6 +3,9 @@ import { ACHIEVEMENTS, CAMPAIGN, WORLDS } from "./config";
 import { CHAPTERS } from "./narrative/config";
 import { missionDefinition, missionsForStudyDay } from "../missions/content";
 import { initialMissionProgress } from "../missions/state";
+import { initialLearningState } from "../learning/state";
+import { recommendedVocabularyMissionIds } from "../learning/selectors";
+import type { LearningState } from "../learning/types";
 import type { Clock, JourneyQuest, JourneyState } from "./types";
 
 export function emptyJourney(): JourneyState {
@@ -35,9 +38,14 @@ export function emptyJourney(): JourneyState {
     boss: { completedSteps: [], defeatedAt: null },
     developmentData: false,
     missions: initialMissionProgress(),
+    learning: initialLearningState(),
   };
 }
-export function questsForDay(studyDay: number): JourneyQuest[] {
+export function questsForDay(
+  studyDay: number,
+  learning?: LearningState,
+  today?: string,
+): JourneyQuest[] {
   if (!Number.isSafeInteger(studyDay))
     throw new RangeError("Study Day must be an integer.");
   if (studyDay < WORLDS[0].start || studyDay > WORLDS[0].end) return [];
@@ -47,7 +55,11 @@ export function questsForDay(studyDay: number): JourneyQuest[] {
   const chapter = CHAPTERS.find(
     (candidate) => studyDay >= candidate.start && studyDay <= candidate.end,
   );
-  return missionsForStudyDay(studyDay).map((scheduled) => {
+  const recommendations =
+    learning && today
+      ? recommendedVocabularyMissionIds(learning, today)
+      : undefined;
+  return missionsForStudyDay(studyDay, recommendations).map((scheduled) => {
     const mission = missionDefinition(scheduled.missionId);
     if (!mission || !world || !chapter)
       throw new Error("Invalid mission schedule configuration.");
@@ -89,5 +101,6 @@ export function startJourney(now: Clock): JourneyState {
     tokenWeek: weekStart(now.day),
     consistencyThrough: addCalendarDays(now.day, -1),
     quests: questsForDay(1),
+    learning: initialLearningState(now.instant),
   };
 }

@@ -219,7 +219,10 @@ export function applyJourneyAction(
           : next.streak,
         lastStudyDay: now.day,
         consistencyThrough: now.day,
-        quests: [...next.quests, ...questsForDay(dayComplete + 1)],
+        quests: [
+          ...next.quests,
+          ...questsForDay(dayComplete + 1, next.learning, now.day),
+        ],
       };
     }
   } else {
