@@ -1,0 +1,63 @@
+name: EAS Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        required: true
+        default: ios
+        type: choice
+        options:
+          - ios
+          - android
+      profile:
+        description: EAS build profile
+        required: true
+        default: preview
+        type: choice
+        options:
+          - development
+          - preview
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-${{ inputs.platform }}-${{ inputs.profile }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ inputs.platform }} / ${{ inputs.profile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.profile }}
+    env:
+      CI: true
+      EXPO_NO_TELEMETRY: 1
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Require Expo authentication
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "Configure EXPO_TOKEN in this GitHub environment before running an EAS build."
+            exit 1
+          fi
+
+      - name: Start EAS build
+        run: npx eas-cli@24.8.0 build --platform "${{ inputs.platform }}" --profile "${{ inputs.profile }}" --non-interactive --no-wait

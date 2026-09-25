@@ -4,9 +4,12 @@ Aplicativo mobile de prática de inglês com uma campanha local de **90 Study Da
 
 ## Executar
 
+Use Node.js 22.23.1, definido em `.nvmrc` e `package.json`.
+
 ```sh
 cd ~/Projetos/english-comeback
-npm install
+nvm use
+npm ci
 npm start -- --lan --port 8082
 ```
 
@@ -129,10 +132,11 @@ As ferramentas anteriores continuam disponíveis para Prologue, Titles, Time Cap
 npm run check:game
 npm run lint
 npm run typecheck
-npx expo install --check
-npx expo export --platform web
-npx expo export:embed --eager --platform ios --dev false --minify true ...
-npx expo export:embed --eager --platform android --dev false --minify true ...
+npm run check:expo
+npm run audit:ci
+npm run export:web
+npm run export:ios
+npm run export:android
 ```
 
 Resultado atual: **131/131 testes passando**. Lint sem warnings, TypeScript sem erros, dependências compatíveis com Expo SDK 57 e bundles de produção aprovados para web, iOS e Android. O export web também foi servido localmente e carregou em viewport 390×844 sem erro de runtime.
@@ -148,3 +152,38 @@ Resultado atual: **131/131 testes passando**. Lint sem warnings, TypeScript sem 
 - Apenas World 01 é jogável. Campaign II e III continuam bloqueadas.
 - O Learning Engine, vocabulary inventory e spaced repetition ainda não existem.
 - Não há backend, conta, cloud sync ou recuperação dos arquivos de áudio após remover o aplicativo.
+
+## DevOps e builds
+
+O workflow `.github/workflows/ci.yml` roda em pushes para `master`, pull requests e execução manual. Ele usa Node 22.23.1 com cache npm, executa instalação reproduzível, 131 testes, lint, TypeScript, compatibilidade Expo, audit para HIGH/CRITICAL e exports web, iOS e Android. O export web fica disponível por sete dias como artifact. Os 13 alertas MODERATE transitivos conhecidos não são mascarados, mas não bloqueiam a CI.
+
+O workflow `.github/workflows/eas-build.yml` é exclusivamente manual, aceita iOS ou Android e usa `preview` como padrão. `production` exige seleção explícita e o workflow não submete builds às lojas. Para utilizá-lo:
+
+1. Crie um Access Token na conta Expo.
+2. No GitHub, crie os Environments `development`, `preview` e `production`.
+3. Adicione `EXPO_TOKEN` como Environment Secret, nunca como texto no workflow.
+4. Abra **Actions → EAS Build → Run workflow** e escolha plataforma e perfil.
+
+Os perfis em `eas.json` possuem finalidades diferentes:
+
+- `development`: inclui `expo-dev-client`, ferramentas de desenvolvimento e depende do Metro para carregar o projeto;
+- `preview`: aplicativo autônomo, sem ferramentas de desenvolvimento, para teste próximo da produção;
+- `production`: futuro binário de loja; não é construído ou publicado automaticamente.
+
+Expo Go continua útil para iteração rápida enquanto as APIs utilizadas forem compatíveis. Development Build testa o cliente nativo próprio. Preview Build é a validação real sem Metro. No iPhone, o preview interno exige Apple Developer Program, registro do UDID e assinatura ad hoc.
+
+O projeto está vinculado a `@janailsonf-a/english-comeback`. Em uma máquina nova:
+
+```sh
+npx eas-cli@24.8.0 login
+npx eas-cli@24.8.0 whoami
+```
+
+Para iniciar manualmente um preview iOS, após registrar o aparelho e configurar as credenciais Apple:
+
+```sh
+npx eas-cli@24.8.0 device:create
+npx eas-cli@24.8.0 build --platform ios --profile preview
+```
+
+O bundle identifier iOS e o application ID Android são `com.janailsonfa.englishcomeback`. Tokens, certificados e provisioning profiles nunca devem ser adicionados ao Git.
